@@ -69,6 +69,23 @@ hub:
               }
           }
 
+          s2msi_minimal_profile = {
+              'display_name': '🛰️ Sentinel-2 MSI - minimal (s2msi-minimal)',
+              'description': 'Sentinel-2 MSI processor - Python 3.13 / eopf 3.0 / zarr v3 (test)',
+              'kubespawner_override': {
+                  'image': 'y74y55mn.gra7.container-registry.ovh.net/healpix-private/s2msi:minimal',
+                  'cpu_limit': 16,
+                  'cpu_guarantee': 2,
+                  'mem_limit': '64G',
+                  'mem_guarantee': '8G',
+                  'node_selector': {
+                      'hub.jupyter.org/node-purpose': 'user',
+                      'node-role': 'cpu'
+                  },
+                  'storage_home_mount_path': '/home/dask'
+              }
+          }
+
           s3syn_profile = {
               'display_name': '🔄 Sentinel-3 Synergy (s3syn)',
               'description': 'Sentinel-3 SYNERGY processor environment — 2 to 16 CPUs, 8 to 32 GB RAM',
@@ -103,6 +120,7 @@ hub:
           profiles = [standard_profile, gpu_profile]
           if username in s2msi_users:
               profiles.insert(1, s2msi_profile)
+              profiles.insert(2, s2msi_minimal_profile)
           if username in s3syn_users:
               profiles.insert(-1, s3syn_profile)
           return profiles

@@ -38,7 +38,7 @@ spec:
     spec:
       containers:
         - name: stac-fastapi-geoparquet
-          image: jeani/stac-fastapi-geoparquet:v0.0.5-ovh
+          image: jeani/stac-fastapi-geoparquet:v0.0.6-ovh
           ports:
             - containerPort: 8000
           env:
@@ -64,6 +64,8 @@ spec:
               value: "0.0.0.0"
             - name: AWS_ANON
               value: "true"
+            - name: STAC_FASTAPI_COLLECTIONS_RELOAD_SECONDS
+              value: "60"
           resources:
             requests:
               memory: "256Mi"
