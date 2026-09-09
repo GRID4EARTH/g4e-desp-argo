@@ -34,7 +34,7 @@ hub:
       async def profile_list(spawner):
           username = spawner.user.name
           s2msi_users = ['pablo-richard', 'capetienne', 'cgueguen', 'j34ni', 'annefou', 'tinaok']
-          s3syn_users = ['j34ni', 'annefou']
+          s3syn_users = ['j34ni', 'annefou', 'tinaok', 'tik65536']
 
           standard_profile = {
               'display_name': '✅ Standard (CPU)',
@@ -56,7 +56,24 @@ hub:
               'display_name': '🛰️ Sentinel-2 MSI (s2msi)',
               'description': 'Sentinel-2 MSI processor environment — 2 to 16 CPUs, up to 64 GB RAM',
               'kubespawner_override': {
-                  'image': 'y74y55mn.gra7.container-registry.ovh.net/healpix-private/s2msi:test',
+                  'image': 'y74y55mn.gra7.container-registry.ovh.net/healpix-private/s2msi:latest',
+                  'cpu_limit': 16,
+                  'cpu_guarantee': 2,
+                  'mem_limit': '64G',
+                  'mem_guarantee': '8G',
+                  'node_selector': {
+                      'hub.jupyter.org/node-purpose': 'user',
+                      'node-role': 'cpu'
+                  },
+                  'storage_home_mount_path': '/home/dask'
+              }
+          }
+
+          s2msi_minimal_profile = {
+              'display_name': '🛰️ Sentinel-2 MSI - minimal (s2msi-minimal)',
+              'description': 'Sentinel-2 MSI processor - Python 3.13 / eopf 3.0 / zarr v3 (test)',
+              'kubespawner_override': {
+                  'image': 'y74y55mn.gra7.container-registry.ovh.net/healpix-private/s2msi:minimal',
                   'cpu_limit': 16,
                   'cpu_guarantee': 2,
                   'mem_limit': '64G',
@@ -70,8 +87,8 @@ hub:
           }
 
           s3syn_profile = {
-              'display_name': '🔄 S3 Sync (s3syn)',
-              'description': 'S3 synchronisation environment — 2 to 16 CPUs, 8 to 32 GB RAM',
+              'display_name': '🔄 Sentinel-3 Synergy (s3syn)',
+              'description': 'Sentinel-3 SYNERGY processor environment — 2 to 16 CPUs, 8 to 32 GB RAM',
               'kubespawner_override': {
                   'image': 'y74y55mn.gra7.container-registry.ovh.net/healpix-private/s3syn:latest',
                   'image_pull_policy': 'Always',
@@ -103,6 +120,7 @@ hub:
           profiles = [standard_profile, gpu_profile]
           if username in s2msi_users:
               profiles.insert(1, s2msi_profile)
+              profiles.insert(2, s2msi_minimal_profile)
           if username in s3syn_users:
               profiles.insert(-1, s3syn_profile)
           return profiles
