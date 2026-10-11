@@ -1040,20 +1040,21 @@ Exit code 2 (invalid arguments or data, duplicated ids, missing credentials) is 
 - `exclude_stores` (store paths relative to `s3://grid4earth/public`, or URLs) leaves stores out
   of the index while they stay in the bucket. The template always adds the second copy of the
   OLCI product of 15 January 2026 (`eopf-mirror/sentinel-3-olci-l1-efr/..._004.zarr`; the
-  `..._004.SEN3.zarr` copy is the one catalogued, decision of 9 October 2026). With stac-scraper
-  62b5c01, which has no `--exclude-stores`, their items are removed from the scraped parquet file;
-  a stac-scraper with the option (PR #24) is given it.
-- The update stops before uploading anything (exit code 2, not retried) when a target parquet
-  file still has **duplicated item ids** (e.g. two stores mirrored before the id change): the ids
-  and their stores are printed; add one store of each pair to `exclude_stores` (or give it a
-  distinct id) and run `stac-scraper-update` again (below). It also stops on a dataset directory
+  `..._004.SEN3.zarr` copy is the one catalogued, decision of 9 October 2026). The stac-scraper of
+  the orbit image (7494f3f, with #24) is given `--exclude-stores`; an older stac-scraper without
+  the option (62b5c01) gets the items of these stores removed from the scraped parquet file instead.
+- The update stops before uploading anything (exit code 2, not retried) when a target category
+  has **duplicated item ids** (e.g. two stores mirrored before the id change; stac-scraper 7494f3f
+  refuses the category, and the check of the datasets then names them): the ids and their stores
+  are printed; add one store of each pair to `exclude_stores` (or give it a distinct id) and run
+  `stac-scraper-update` again (below). It also stops on a dataset directory
   without a root `zarr.json` (an interrupted upload: delete it), on a store stac-scraper cannot
   index (e.g. a `processing:expression` object written before this clean-up: the store is
   named), on a target collection without a stac-scraper collection template, and on a
   `dry_run` other than `true` / `false`. These checks run only after the conversion: to find
   such problems before a long run, run `stac-scraper-update` with `dry_run=true` on the two
   categories first.
-- stac-scraper 62b5c01 has no collection template for `sentinel-3-slstr-l2-frp` and
+- stac-scraper 7494f3f has no collection template for `sentinel-3-slstr-l2-frp` and
   `sentinel-3-slstr-l2-lst`: `check-arguments` refuses `update_stac=true` for them, run these
   collections with `update_stac=false`. `update_stac=true` also requires the default
   `mirror_prefix` / `converted_prefix` (the indexed categories under `s3://grid4earth/public`).

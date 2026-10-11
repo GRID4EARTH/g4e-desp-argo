@@ -12,7 +12,7 @@ FROM y74y55mn.gra7.container-registry.ovh.net/healpix-private/g4e-jupyterhub-pri
 # FIX_HALF_PIXEL workaround of healpix-convert-multistage is then a no-op (see tf/README.md)
 ARG HEALPIX_CONVERT_SHA=3aa72e03be22d94e6880fdd86d9f0b4298e0ea91
 ARG LEGACY_CONVERTERS_SHA=a2b67a4f465beea5708b47328de8524f902dade6
-ARG STAC_SCRAPER_SHA=62b5c0195ce2f0e2bbe8ad3f3caeb7c5e03853b5
+ARG STAC_SCRAPER_SHA=7494f3fd702a47906a66efb0e90fdd4ccfe924f6
 
 USER root
 RUN --mount=type=secret,id=github_token,mode=0444 \

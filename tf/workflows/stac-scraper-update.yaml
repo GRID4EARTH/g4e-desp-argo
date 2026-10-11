@@ -26,9 +26,16 @@ spec:
   # eopf-mirror/sentinel-3-olci-l1-efr holds the same OLCI product twice (..._004.SEN3.zarr
   # and ..._004.zarr, same stac_discovery id); both copies stay in the bucket and only
   # the .SEN3.zarr one is catalogued (decision of 2026-10-09). stac-scraper is given
-  # --exclude-stores when its version has it (stac-scraper PR #24); otherwise (62b5c01)
-  # the items of these stores are removed from the scraped parquet files before the
-  # checks below.
+  # --exclude-stores when its version has it (stac-scraper #24, in the orbit image
+  # since 7494f3f); an older stac-scraper (62b5c01) has no such option, so the items
+  # of these stores are removed from the scraped parquet files before the checks
+  # below.
+  #
+  # Item ids follow stac-scraper #24: for the eopf-mirror group the id is the store
+  # name without .zarr / .SAFE / .SEN3 (ID_FROM_STORE_NAME), for the other groups
+  # the stac_discovery id. A category whose items share an id fails inside
+  # stac-scraper (no parquet file); the check of the datasets after the failure
+  # names the ids and their stores.
   #
   # Publishing (dry_run=true uploads nothing and prints what would be uploaded):
   #   1. only the parquet files of the targets (<group>_-_<category>.parquet) are
@@ -53,9 +60,11 @@ spec:
   #     that is an object in one item and not in another (the geoparquet writer
   #     needs one type per field) or an empty object in every item (parquet has
   #     no empty struct), e.g. the processing:expression object of healpix-convert;
-  #   - duplicated item ids in a target parquet file (the STAC API answers 404 for
-  #     them): the ids and their stores are printed; add one store of each pair to
-  #     exclude_stores (or give it a distinct stac_discovery id) and re-run;
+  #   - duplicated item ids in a target category (the STAC API answers 404 for
+  #     them; found by the check of the datasets, or in the parquet file with an
+  #     older stac-scraper): the ids and their stores are printed; add one store of
+  #     each pair to exclude_stores (or give it a distinct stac_discovery id) and
+  #     re-run;
   #   - a target without a stac-scraper collection template, or whose collection
   #     id is published for another parquet file;
   #   - an invalid include_categories, exclude_stores, dry_run (true or false only)
@@ -212,6 +221,11 @@ spec:
         # at the zarr store of an item
         STORE_ASSET = "product"
         COLLECTIONS_JSON = "collections.json"
+        # groups whose item id stac-scraper builds from the store name (its default
+        # --id-from-store-name, stac-scraper #24); the other groups use the
+        # stac_discovery id
+        ID_FROM_STORE_NAME = ("eopf-mirror",)
+        LEGACY_SUFFIXES = (".SAFE", ".SEN3")
         # stores left out of the index although they stay in the bucket (always added
         # to exclude_stores), relative to bucket_prefix. The same OLCI product is
         # stored twice with the same stac_discovery id: as ..._004.SEN3.zarr (the
@@ -624,15 +638,27 @@ spec:
             return path, None, item
 
 
-        def diagnose_scrape(fs, root, datasets):
+        def store_name(path):
+            """Item id stac-scraper gives a store of an ID_FROM_STORE_NAME group: the
+            store name without .zarr and without a legacy suffix (stac_scraper/items.py)."""
+            name = path.rstrip("/").rsplit("/", 1)[-1].removesuffix(".zarr")
+            for suffix in LEGACY_SUFFIXES:
+                name = name.removesuffix(suffix)
+            return name
+
+
+        def diagnose_scrape(fs, root, datasets, excluded=()):
             """Deterministic causes of a scrape-items failure in the target datasets
-            (only called after a failure: it reads every root zarr.json again)."""
+            (only called after a failure: it reads every root zarr.json again). Stores
+            in excluded are skipped, as stac-scraper skips them."""
             problems = []
             with ThreadPoolExecutor(16) as pool:
                 for category, paths in datasets.items():
+                    paths = [path for path in paths if not is_excluded(path, excluded)]
                     # stac-scraper adds the assets and storage schemes of its asset
                     # template to every item: never empty
                     kinds, filled, indexable = {}, {"assets", "properties.storage:schemes"}, 0
+                    by_id = {}
                     for path, problem, item in pool.map(
                         lambda path: read_dataset_item(fs, root, path), paths
                     ):
@@ -640,9 +666,23 @@ spec:
                             problems.append(f"{path}: {problem}")
                         elif item is not None:
                             indexable += 1
+                            item_id = (
+                                store_name(path)
+                                if category.split("/")[0] in ID_FROM_STORE_NAME
+                                else item["id"]
+                            )
+                            by_id.setdefault(item_id, []).append(path)
                             for key in ("geometry", "bbox"):
                                 item.pop(key, None)
                             collect_kinds(item, "", path, kinds, filled)
+                    # stac-scraper (#24) refuses a category whose items share an id
+                    for item_id, stores in sorted(by_id.items()):
+                        if len(stores) > 1:
+                            problems.append(
+                                f"{category}: duplicated item id {item_id}: {', '.join(stores)} "
+                                "(add one of them to exclude_stores, or give it a distinct "
+                                "stac_discovery id)"
+                            )
                     if not indexable:
                         problems.append(
                             f"{category}: no dataset with a root stac_discovery (uploads in "
@@ -880,7 +920,10 @@ spec:
                     print("scrape-items failed: checking the target datasets", flush=True)
                     try:
                         problems = diagnose_scrape(
-                            fs, root, {category: datasets[category] for category in scraped}
+                            fs,
+                            root,
+                            {category: datasets[category] for category in scraped},
+                            excluded_stores,
                         )
                     except Exception as error:  # best effort: the retry decides
                         print(f"WARNING: could not check the target datasets: {error!r}")
