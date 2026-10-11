@@ -226,6 +226,12 @@ kubectl get pods -n argo
 kubectl get pods -n s3proxy
 ```
 
+`data.grid4earth.eu` caches objects for 10 min. To serve an overwritten object right away, clear the cache by restarting the proxy:
+
+```bash
+kubectl rollout restart deployment/s3proxy -n s3proxy
+```
+
 ---
 
 ## Architecture

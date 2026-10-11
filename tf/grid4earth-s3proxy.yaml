@@ -28,7 +28,7 @@ spec:
     spec:
       containers:
         - name: s3proxy
-          image: nginxinc/nginx-s3-gateway:latest
+          image: nginxinc/nginx-s3-gateway:latest-20261005
           ports:
             - containerPort: 80
           env:
@@ -50,6 +50,13 @@ spec:
               value: "false"
             - name: AWS_SIGS_VERSION
               value: "4"
+            # Default is 1h: an overwritten object stays stale that long (#24)
+            - name: PROXY_CACHE_VALID_OK
+              value: "10m"
+            - name: PROXY_CACHE_VALID_NOTFOUND
+              value: "30s"
+            - name: ACCESS_LOG_CACHE_STATUS
+              value: "true"
           envFrom:
             - secretRef:
                 name: s3proxy-credentials
