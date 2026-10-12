@@ -28,7 +28,7 @@ spec:
     spec:
       containers:
         - name: s3proxy
-          image: nginxinc/nginx-s3-gateway:latest
+          image: nginxinc/nginx-s3-gateway:latest-20260810
           ports:
             - containerPort: 80
           env:
