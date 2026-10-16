@@ -11,7 +11,7 @@ RUN --mount=type=secret,id=gitlab_token,mode=0444 \
         torch \
         "healpix-geo @ git+https://github.com/GRID4EARTH/healpix-geo.git@main#subdirectory=python/healpix-geo" \
         "healpix-plot @ git+https://github.com/GRID4EARTH/healpix-plot.git" \
-        "healpix-resample @ git+https://github.com/GRID4EARTH/healpix-resample.git@612c6bd9fcf3a5d64c49471c07985e64e1615bd1" \
+        "healpix-resample==2026.10.0" \
         xdggs \
         "s2msi[cluster-plugin,notebook] @ git+https://oauth2:$(cat /run/secrets/gitlab_token)@gitlab.eopf.copernicus.eu/S2/msi/s2msi.git@main" \
         argo-workflows
