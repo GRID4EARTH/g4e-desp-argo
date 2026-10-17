@@ -9,6 +9,9 @@ server:
     enabled: false
   uiConfig:
     prefectUiApiUrl: http://localhost:4200/api
+  env:
+    - name: PREFECT_SERVER_ANALYTICS_ENABLED
+      value: "false"
 
 service:
   type: ClusterIP
