@@ -50,6 +50,11 @@ variable "github_client_secret" {
   sensitive = true
 }
 
+variable "prefect_db_password" {
+  type      = string
+  sensitive = true
+}
+
 provider "ovh" {
   endpoint = "ovh-eu"
 }
@@ -199,6 +204,16 @@ resource "kubernetes_namespace" "argo" {
   depends_on = [ovh_cloud_project_kube_nodepool.cpu_pool]
 }
 
+resource "kubernetes_namespace" "prefect" {
+  metadata {
+    name = "prefect"
+  }
+  lifecycle {
+    ignore_changes = [metadata]
+  }
+  depends_on = [ovh_cloud_project_kube_nodepool.cpu_pool]
+}
+
 resource "kubernetes_secret" "argo_s3_credentials" {
   metadata {
     name      = "argo-s3-credentials"
@@ -209,6 +224,18 @@ resource "kubernetes_secret" "argo_s3_credentials" {
     secretKey = var.s3_secret_key
   }
   depends_on = [kubernetes_namespace.argo]
+}
+
+resource "kubernetes_secret" "prefect_postgresql" {
+  metadata {
+    name      = "prefect-postgresql"
+    namespace = "prefect"
+  }
+  data = {
+    password            = var.prefect_db_password
+    "connection-string" = "postgresql+asyncpg://prefect:${var.prefect_db_password}@prefect-server-postgresql.prefect:5432/server"
+  }
+  depends_on = [kubernetes_namespace.prefect]
 }
 
 resource "helm_release" "ingress_nginx" {
@@ -387,6 +414,24 @@ resource "helm_release" "argo_workflows" {
   ]
 }
 
+resource "helm_release" "prefect_server" {
+  name       = "prefect-server"
+  namespace  = "prefect"
+  repository = "https://prefecthq.github.io/prefect-helm"
+  chart      = "prefect-server"
+  version    = "2026.10.6163015"
+  timeout    = 600
+
+  values = [
+    file("${path.module}/prefect-values.yaml"),
+  ]
+
+  depends_on = [
+    kubernetes_namespace.prefect,
+    kubernetes_secret.prefect_postgresql,
+  ]
+}
+
 resource "kubernetes_network_policy" "singleuser_dask" {
   metadata {
     name      = "singleuser-dask-gateway"
@@ -461,6 +506,49 @@ resource "kubernetes_network_policy" "singleuser_to_argo" {
 
   depends_on = [
     helm_release.argo_workflows,
+    helm_release.jupyterhub,
+  ]
+}
+
+resource "kubernetes_network_policy" "singleuser_to_prefect" {
+  metadata {
+    name      = "singleuser-to-prefect"
+    namespace = local.namespace
+  }
+
+  spec {
+    pod_selector {
+      match_labels = {
+        "app"       = "jupyterhub"
+        "component" = "singleuser-server"
+        "release"   = "jupyterhub"
+      }
+    }
+
+    egress {
+      ports {
+        port     = "4200"
+        protocol = "TCP"
+      }
+      to {
+        namespace_selector {
+          match_labels = {
+            "kubernetes.io/metadata.name" = "prefect"
+          }
+        }
+        pod_selector {
+          match_labels = {
+            "app.kubernetes.io/component" = "server"
+          }
+        }
+      }
+    }
+
+    policy_types = ["Egress"]
+  }
+
+  depends_on = [
+    helm_release.prefect_server,
     helm_release.jupyterhub,
   ]
 }
