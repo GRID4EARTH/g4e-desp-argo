@@ -66,14 +66,14 @@ spec:
         import xarray as xr
         import torch
         from dask.distributed import LocalCluster
-        from legacy_converters import (
+        from healpix_convert import (
             ConvertSettings,
             convert_group_to_healpix,
             create_staging_cache,
-            get_settings,
             prepare_healpix_dataset,
             create_healpix_dataset
         )
+        from legacy_converters import get_settings
 
         _HEALPIX_L4 = {
             "refinement_level": 4,
