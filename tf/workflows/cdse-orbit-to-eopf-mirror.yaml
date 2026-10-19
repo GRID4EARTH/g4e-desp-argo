@@ -8,6 +8,8 @@
 #                Complete stores (root zarr.json with stac_discovery) are skipped.
 #                The STAC id (stac_discovery.id) of a new store is its product
 #                name (see "Item ids" below).
+#                Its stac_discovery also records where it comes from
+#                (derived_from, processing:software / lineage, providers).
 #
 # Region (lat_range, default "48.0,50.0" = 48..50 N, around Paris; the
 # preset "france" = 41.3..51.2 stays available): the orbit is cut as a LATITUDE
@@ -764,7 +766,7 @@ spec:
 
 
         def match_sample_service(items, eopf_collection):
-            """{cdse item id: EOPF Zarr href} for the products on the Sample Service.
+            """{cdse item id: Sample Service item} for the products on the Sample Service.
 
             One search over the orbit (time span +-5 min, union of the item bboxes)
             instead of one get_item + one search per item; then, per item, the same
@@ -806,7 +808,7 @@ spec:
             for cand in candidates:
                 by_key.setdefault(match_key(cand.id), []).append(cand)
             keys = Counter(match_key(i.id) for i in items)
-            hrefs = {}
+            matches = {}
             for item in items:
                 match = by_id.get(item.id)
                 key = match_key(item.id)
@@ -821,8 +823,8 @@ spec:
                         print(f"note: {item.id}: {len(found)} Sample Service product(s) with the same "
                               "sensing, none unambiguous with the same footprint: from CDSE")
                 if match is not None:
-                    hrefs[item.id] = match.assets["product"].href
-            return hrefs
+                    matches[item.id] = match
+            return matches
 
 
         # ---- band mode -------------------------------------------------------------------
@@ -1505,20 +1507,21 @@ spec:
                     print(f"note: {len(dups)} tiles have 2 products (datatake boundary), "
                           f"both kept: {', '.join(dups)}")
 
-            eopf_hrefs = {}
+            eopf_matches = {}
             if check_sample_service.strip().lower() == "true":
-                eopf_hrefs = match_sample_service(items, g4e_collection)
-                if eopf_hrefs and len(eopf_hrefs) < len(items):
-                    print(f"note: the Sample Service has {len(eopf_hrefs)} of the {len(items)} "
+                eopf_matches = match_sample_service(items, g4e_collection)
+                if eopf_matches and len(eopf_matches) < len(items):
+                    print(f"note: the Sample Service has {len(eopf_matches)} of the {len(items)} "
                           "products; all of them are taken from CDSE (Sample Service stores and "
                           "CDSE conversions cannot be merged into one HEALPix dataset)")
-                    eopf_hrefs = {}
+                    eopf_matches = {}
 
             prefix = mirror_prefix.rstrip("/")
             records = []
             for item in items:
                 asset = find_product_asset(item)
                 local_path = asset.extra_fields.get("file:local_path") or f"{item.id}.zip"
+                match = eopf_matches.get(item.id)
                 records.append({
                     "id": item.id,
                     "datetime": item.properties["datetime"],
@@ -1527,7 +1530,10 @@ spec:
                     "size": int(asset.extra_fields.get("file:size") or 0),
                     "safe_name": posixpath.basename(local_path),
                     "mirror_path": f"{prefix}/{g4e_collection}/{safe_stem(local_path)}.zarr",
-                    "eopf_href": eopf_hrefs.get(item.id, ""),
+                    "eopf_href": match.assets["product"].href if match else "",
+                    # STAC items the store derives from (mirror-item: derived_from links)
+                    "stac_item": item.get_self_href() or "",
+                    "eopf_item": (match.get_self_href() or "") if match else "",
                 })
             for r in records:
                 source = "eopf" if r["eopf_href"] else "cdse"
@@ -1673,6 +1679,7 @@ spec:
 
         item_json = r"""{{inputs.parameters.item}}"""
         s3_endpoint = "{{inputs.parameters.s3_endpoint}}"
+        eopf_image = "{{inputs.parameters.eopf_image}}"
 
         S3_CREDS_DIR = "/etc/s3"
         CDSE_CREDS_DIR = "/etc/cdse"
@@ -2030,6 +2037,96 @@ spec:
             xr.open_datatree(zarr_path, engine="zarr", chunks={}).close()
 
 
+        # ---- provenance -----------------------------------------------------------
+        # Same fields as legacy-datasets safe-to-zarr/provenance.py: derived_from links,
+        # processing:software, processing:lineage and GRID4EARTH in providers, in the
+        # root stac_discovery (read by stac-scraper).
+        GRID4EARTH = {"name": "GRID4EARTH project", "url": "https://grid4earth.eu/"}
+
+
+        def package_version(name):
+            from importlib.metadata import PackageNotFoundError, version
+
+            try:
+                return version(name)
+            except PackageNotFoundError:
+                return "unknown"
+
+
+        def valid_providers(providers):
+            return bool(providers) and all(
+                isinstance(p, dict) and isinstance(p.get("name"), str) and p["name"]
+                for p in providers)
+
+
+        def add_provenance(local_store, software, lineage, roles, links, api=None):
+            """Record in the root stac_discovery where the store comes from.
+
+            api: properties of the Sample Service STAC API item, whose EOPF-CPM version,
+            processing:version and providers the store's own stac_discovery lacks or has
+            broken ("TODO", OLCI providers without a name)."""
+            path = os.path.join(local_store, "zarr.json")
+            with open(path) as f:
+                metadata = json.load(f)
+            stac = metadata["attributes"]["stac_discovery"]
+            props = stac.setdefault("properties", {})
+            api = api or {}
+            props["processing:software"] = {**props.get("processing:software", {}),
+                                            **api.get("processing:software", {}), **software}
+            if props.get("processing:version") in (None, "", "TODO") and api.get("processing:version"):
+                props["processing:version"] = api["processing:version"]
+            if not valid_providers(props.get("providers")) and valid_providers(api.get("providers")):
+                props["providers"] = api["providers"]
+            providers = [p for p in props.get("providers", [])
+                         if not (isinstance(p, dict) and p.get("name") == GRID4EARTH["name"])]
+            props["providers"] = providers + [{**GRID4EARTH, "roles": roles}]
+            props["processing:lineage"] = f"{props.get('processing:lineage') or 'systematic'}; {lineage}"
+            stac["links"] = [link for link in stac.get("links", [])
+                             if link.get("rel") != "derived_from"] + [
+                {"rel": "derived_from", **link} for link in links if link["href"]]
+            with open(path, "w") as f:
+                json.dump(metadata, f, indent=2)
+            print("provenance:", lineage)
+
+
+        def sample_service_provenance(local_store, item):
+            api = {}
+            if item.get("eopf_item"):
+                try:
+                    api = http_json(item["eopf_item"]).get("properties", {})
+                except Exception as exc:  # the copy itself is fine: record the rest
+                    print(f"warning: Sample Service item not read ({type(exc).__name__}: {redact(exc)})")
+            today = time.strftime("%Y-%m-%d", time.gmtime())
+            add_provenance(
+                local_store,
+                {"xarray": package_version("xarray"), "zarr": package_version("zarr"),
+                 "g4e-desp-argo": f"cdse-orbit-to-eopf-mirror ({eopf_image})"},
+                f"copied from the EOPF Sample Service by GRID4EARTH on {today} and "
+                "re-encoded from Zarr v2 to v3",
+                ["host"],
+                [{"href": item["eopf_href"], "type": "application/vnd+zarr",
+                  "title": "EOPF Sample Service product"},
+                 {"href": item.get("eopf_item", ""), "type": "application/geo+json",
+                  "title": "EOPF Sample Service STAC item"}],
+                api,
+            )
+
+
+        def cdse_provenance(local_store, item):
+            today = time.strftime("%Y-%m-%d", time.gmtime())
+            eopf_version = package_version("eopf")
+            add_provenance(
+                local_store,
+                {"eopf": eopf_version,
+                 "g4e-desp-argo": f"cdse-orbit-to-eopf-mirror ({eopf_image})"},
+                f"downloaded from CDSE ({item['id']}) by GRID4EARTH on {today}, "
+                f"converted with eopf {eopf_version}",
+                ["processor", "host"],
+                [{"href": item.get("stac_item", ""), "type": "application/geo+json",
+                  "title": f"CDSE STAC item {item['id']}"}],
+            )
+
+
         # ---- upload ---------------------------------------------------------------
         def check_local_store(local_store):
             with open(os.path.join(local_store, "zarr.json")) as f:
@@ -2124,6 +2221,7 @@ spec:
                     try:
                         copy_sample_service(item["eopf_href"], local_zarr)
                         check_local_store(local_zarr)
+                        sample_service_provenance(local_zarr, item)
                         built = True
                     except Exception as exc:
                         print(f"Sample Service copy failed ({type(exc).__name__}: {redact(exc)}); "
@@ -2136,6 +2234,7 @@ spec:
                     convert_safe(local_safe, local_zarr)
                     os.remove(local_safe)  # free the disk before the upload
                     check_local_store(local_zarr)
+                    cdse_provenance(local_zarr, item)
                 set_store_id(local_zarr, product_id(dest))
                 remove_partial(fs, root)
                 upload_store(local_zarr, dest)
