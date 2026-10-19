@@ -1037,6 +1037,14 @@ Exit code 2 (invalid arguments or data, duplicated ids, missing credentials) is 
   `S2C_MSIL2A_20250613T104641_N0511_R051_T31UDQ_20250613T134507`, the id stac-scraper's
   `--id-from-store-name` of stac-scraper PR #24 gives) and keeps the eopf id in the root
   attribute `g4e_mirror.eopf_stac_id`. Stores mirrored before keep their eopf id.
+- **Provenance.** `mirror-item` also records in the root `stac_discovery` of each new store
+  where it comes from (the same fields as legacy-datasets `safe-to-zarr/provenance.py`):
+  `derived_from` links (Sample Service product and STAC item, or the CDSE STAC item),
+  `processing:software` (Sample Service: the API item's, e.g. `EOPF-CPM`, plus `xarray` and
+  `zarr`; CDSE: `eopf`; both: the template and its image), a sentence appended to
+  `processing:lineage`, and GRID4EARTH in `providers` (`host`; also `processor` for a CDSE
+  conversion). For a Sample Service copy, `processing:version` ("TODO") and nameless OLCI
+  `providers` are taken from the API item. Stores mirrored before are not changed.
 - `exclude_stores` (store paths relative to `s3://grid4earth/public`, or URLs) leaves stores out
   of the index while they stay in the bucket. The template always adds the second copy of the
   OLCI product of 15 January 2026 (`eopf-mirror/sentinel-3-olci-l1-efr/..._004.zarr`; the
