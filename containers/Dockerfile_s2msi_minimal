@@ -9,7 +9,7 @@ RUN --mount=type=secret,id=gitlab_token,mode=0444 \
         "shapely>=2.1.0" \
         "xarray>=2026.2" \
         torch \
-        "healpix-geo @ git+https://github.com/GRID4EARTH/healpix-geo.git@main#subdirectory=python/healpix-geo" \
+        "healpix-geo==0.4.1" \
         "healpix-plot @ git+https://github.com/GRID4EARTH/healpix-plot.git" \
         "healpix-resample==2026.10.2" \
         xdggs \
