@@ -56,7 +56,7 @@ hub:
 
           s2msi_profile = {
               'display_name': '🛰️ Sentinel-2 MSI (s2msi)',
-              'description': 'Sentinel-2 MSI processor environment - 2 to 16 CPUs, up to 64 GB RAM',
+              'description': 'Sentinel-2 MSI processor environment - 2 to 16 CPUs, up to 64 GB RAM - frozen image built on 2026-07-06, cannot be rebuilt (s2msi main requires Python 3.13)',
               'kubespawner_override': {
                   'image': 'y74y55mn.gra7.container-registry.ovh.net/healpix-private/s2msi:latest',
                   'cpu_limit': 16,
@@ -73,9 +73,9 @@ hub:
 
           s2msi_minimal_profile = {
               'display_name': '🛰️ Sentinel-2 MSI - minimal (s2msi-minimal)',
-              'description': 'Sentinel-2 MSI processor - Python 3.13 / eopf 3.0 / zarr v3 (test)',
+              'description': 'Sentinel-2 MSI processor - Python 3.13 / eopf 3.0 / zarr v3 - healpix-resample 2026.10.2 - built on 2026-10-21',
               'kubespawner_override': {
-                  'image': 'y74y55mn.gra7.container-registry.ovh.net/healpix-private/s2msi:minimal',
+                  'image': 'y74y55mn.gra7.container-registry.ovh.net/healpix-private/s2msi:2026.10.21',
                   'cpu_limit': 16,
                   'cpu_guarantee': 2,
                   'mem_limit': '64G',

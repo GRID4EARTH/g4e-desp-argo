@@ -91,6 +91,9 @@ metadata:
     nginx.ingress.kubernetes.io/use-regex: "true"
     nginx.ingress.kubernetes.io/rewrite-target: /public/$1
     nginx.ingress.kubernetes.io/configuration-snippet: |
+      if ($request_method = OPTIONS) {
+        return 204;
+      }
       add_header 'Access-Control-Allow-Origin' '*' always;
       add_header 'Access-Control-Allow-Methods' 'GET, HEAD, OPTIONS' always;
       add_header 'Access-Control-Allow-Headers' 'Range,Content-Type' always;
